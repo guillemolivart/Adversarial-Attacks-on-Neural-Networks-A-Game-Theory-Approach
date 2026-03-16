@@ -1,30 +1,28 @@
 [project]
 name = "adversarial-attacks-on-neural-networks-a-game-theory-approach"
 version = "0.1.0"
-description = "Add your description here"
+description = "TFG: Adversarial Attacks with Game Theory"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = "==3.12.*"
 dependencies = [
     "ipykernel>=7.2.0",
     "jupyter>=1.1.1",
-    "keras>=3.13.2",
-    "matplotlib>=3.10.8",
-    "numpy>=2.4.3",
-    "tensorflow>=2.21.0",
-    "torch>=2.10.0",
-    "torchvision>=0.25.0",
-    "tqdm>=4.67.3",
+    "matplotlib>=3.10.0",
+    "numpy>=2.1.0",
+    "torch>=2.5.1",
+    "torchvision>=0.20.1",
+    "torchaudio>=2.5.1",
+    "tqdm>=4.67.1",
 ]
+
+[tool.uv]
+# Això obliga a uv a buscar aquests paquets a l'índex de NVIDIA
+sources = { torch = { index = "pytorch-cu121" }, torchvision = { index = "pytorch-cu121" }, torchaudio = { index = "pytorch-cu121" } }
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
 
 [tool.uv.workspace]
-members = [
-    ".",
-]
-
-[tool.uv.sources]
-adversarial-attacks-on-neural-networks-a-game-theory-approach = { workspace = true, editable = true }
-
-[dependency-groups]
-dev = [
-    "adversarial-attacks-on-neural-networks-a-game-theory-approach",
-]
+members = ["."]
