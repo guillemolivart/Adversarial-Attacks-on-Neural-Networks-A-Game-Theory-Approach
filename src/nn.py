@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class MLPModel(nn.Module):
-    def __init__(self, input_size = 28, output_channels = 10, dropout_rate = 0.5):
+    def __init__(self, in_channels = 3, input_size = 32, output_channels = 10, dropout_rate = 0.5):        
         super(MLPModel, self).__init__()
 
-        self.input_channels = input_size * input_size
+        self.input_channels = in_channels * input_size * input_size
         self.output_channels = output_channels
         
         self.dropout = nn.Dropout(p = dropout_rate)
@@ -27,7 +27,7 @@ class MLPModel(nn.Module):
         return x
     
 class CNNModel(nn.Module):
-    def __init__(self, in_channels = 1, input_size = 28, output_channels = 10, dropout_rate = 0.5):
+    def __init__(self, in_channels = 3, input_size = 32, output_channels = 10, dropout_rate = 0.5):
         super(CNNModel, self).__init__()
 
         self.in_channels = in_channels
