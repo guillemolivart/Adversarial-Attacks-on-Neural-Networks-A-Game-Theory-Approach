@@ -212,6 +212,9 @@ models/
 matrices/
 data/
 
+models_eps_0.1/
+matrices_eps_0.1/
+
 *.tar.gz
 *.pth
 *.npy
