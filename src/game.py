@@ -158,10 +158,10 @@ def main() -> None:
     os.makedirs(models_dir, exist_ok=True)
     
     # Hyperparameters
-    batch_size = 128
+    batch_size = 1024 # 128 before
     epochs_pretrain = 10
     epochs_combat = 20 # 20 matrices
-    epsilon = 0.1
+    epsilon = 0.2
     lr = 0.001
     
     trainloader, testloader = load_cifar10_data(batch_size=batch_size)
@@ -253,13 +253,25 @@ def main() -> None:
     # =================================================================
     print(f"\n🏁 Tournament finished in {time.time() - start_time:.2f} seconds.")
     
+    # 1. Calculate the delta matrix (Clean - Adv) for each epoch
+    matrices_delta = matrices_clean - matrices_adv
+    
     # Print only the last epoch to the console as a summary
     print(f"\n📊 FINAL ADVERSARIAL ACCURACY MATRIX (Epoch {epochs_combat}):")
     print(np.round(matrices_adv[-1], 2))
+
+    print(f"\n📉 FINAL DELTA MATRIX (Clean - Adv | Epoch {epochs_combat}):")
+    print(np.round(matrices_delta[-1], 2))
     
     # Save the 3D Arrays in the matrices folder
     np.save(os.path.join(matrices_dir, 'payoff_matrices_clean.npy'), matrices_clean)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_adv.npy'), matrices_adv)
+    np.save(os.path.join(matrices_dir, 'payoff_matrices_delta.npy'), matrices_delta)
+
+    # Last epoch as CSV for easier visualization in Excel/Sheets
+    np.savetxt(os.path.join(matrices_dir, 'final_clean.csv'), matrices_clean[-1], delimiter=';', fmt='%.2f')
+    np.savetxt(os.path.join(matrices_dir, 'final_adv.csv'), matrices_adv[-1], delimiter=';', fmt='%.2f')
+    np.savetxt(os.path.join(matrices_dir, 'final_delta.csv'), matrices_delta[-1], delimiter=';', fmt='%.2f')
     
     print(f"\n💾 Everything successfully saved in:\n - {matrices_dir}/\n - {models_dir}/")
 

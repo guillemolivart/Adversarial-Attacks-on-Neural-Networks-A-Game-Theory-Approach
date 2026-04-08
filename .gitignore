@@ -212,8 +212,11 @@ models/
 matrices/
 data/
 
-models_eps_0.1/
-matrices_eps_0.1/
+models_10x10_eps_0.1/
+matrices_10x10_eps_0.1/
+models_10x10_eps_0.2/
+matrices_10x10_eps_0.2/
+
 
 *.tar.gz
 *.pth

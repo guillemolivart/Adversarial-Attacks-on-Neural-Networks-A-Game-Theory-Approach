@@ -13,6 +13,7 @@ dependencies = [
     "torchvision>=0.20.1",
     "torchaudio>=2.5.1",
     "tqdm>=4.67.1",
+    "seaborn>=0.13.2",
 ]
 
 [tool.uv]
