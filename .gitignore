@@ -206,17 +206,12 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-notebooks/data/
+.vscode/
 
-models/
-matrices/
+notebooks/data/
 data/
 
-models_10x10_eps_0.1/
-matrices_10x10_eps_0.1/
-models_10x10_eps_0.2/
-matrices_10x10_eps_0.2/
-
+output/models/
 
 *.tar.gz
 *.pth
