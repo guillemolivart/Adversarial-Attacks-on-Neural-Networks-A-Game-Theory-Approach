@@ -34,12 +34,10 @@ class DynamicGenerator(nn.Module):
         self.encoder = nn.Sequential()
         self.decoder = nn.Sequential()
         
-        # Llista per saber quants canals tindrà cada bloc (ex: [16, 32, 64])
+        # List to know how many channels each block will have (e.g., [16, 32, 64])
         enc_channels = [base_channels * (2**i) for i in range(num_blocks)]
         
-        # ==========================================
-        # CONSTRUCCIÓ DE L'ENCODER (Downsampling)
-        # ==========================================
+        # Encoder construction (Downsampling)
         current_in = in_channels
         for i in range(num_blocks):
             current_out = enc_channels[i]
@@ -48,44 +46,39 @@ class DynamicGenerator(nn.Module):
             self.encoder.add_module(f'enc_relu_{i}', nn.ReLU())
             current_in = current_out
             
-        # ==========================================
-        # CONSTRUCCIÓ DEL DECODER (Upsampling)
-        # ==========================================
-        # Donem la volta a la llista de canals per anar reconstruint (ex: [64, 32, 16])
+        # Decoder construction (Upsampling)
         dec_channels = enc_channels[::-1] 
         
         for i in range(num_blocks):
             current_in = dec_channels[i]
-            # L'últim bloc del decoder sempre ha de sortir amb 'base_channels'
+            # The last block of the decoder always has to output with 'base_channels'
             current_out = dec_channels[i+1] if i < num_blocks - 1 else base_channels
             
-            # output_padding=1 és clau perquè el ConvTranspose2d dobli la mida exacta
+            # output_padding=1 is key because the ConvTranspose2d doubles the size exactly
             self.decoder.add_module(f'dec_convT_{i}', nn.ConvTranspose2d(current_in, current_out, kernel_size=3, stride=2, padding=1, output_padding=1))
             self.decoder.add_module(f'dec_bn_{i}', nn.BatchNorm2d(current_out))
             self.decoder.add_module(f'dec_relu_{i}', nn.ReLU())
             
-        # ==========================================
-        # CAPA FINAL (S'adapta a base_channels + in_channels de l'skip connection)
-        # ==========================================
+        # Final layer to generate noise, concatenating the original image with the decoder output
         self.final_layer = nn.Sequential(
             nn.Conv2d(base_channels + self.in_channels, self.in_channels, kernel_size=3, padding=1),
             nn.Tanh()
         )
         
     def forward(self, x, epsilon=0.1):
-        # 1. Extraiem característiques (baixa resolució)
+        # Extract features
         encoded = self.encoder(x)
         
-        # 2. Reconstruïm a la mida original
+        # Reconstruct to the original size
         decoded = self.decoder(encoded)
         
-        # 3. Concatenem la imatge original amb les característiques processades
+        # Concatenate the original image with the decoded features to give more context to the noise generation
         combined = torch.cat((x, decoded), dim=1)
         
-        # 4. Generem el soroll (-1 a 1 per la Tanh)
+        # Generate noise (-1 to 1 due to Tanh)
         noise = self.final_layer(combined)
         
-        # 5. Escaleu el soroll i l'apliquem limitant valors (clamp)
+        # Scale the noise and apply it
         delta = epsilon * noise
         x_adv = torch.clamp(x + delta, -1.0, 1.0)
         
@@ -128,13 +121,28 @@ class BasicPerturbationGenerator(nn.Module):
 
         return x_adv, delta
 
+"""
 
 class AdvancedPerturbationGenerator(nn.Module):
     
-    #Encoder-Decoder architecture with upsampling layers.
-    #Reduces the image to understand global features, then it reconstructs the image with the perturbation.
+    """
+    An Encoder-Decoder architecture used to generate adversarial perturbations.
+    It reduces the input image to understand global features, then reconstructs 
+    it to generate the optimal noise (perturbation).
     
-    def __init__(self, in_channels = 3, input_size = 32):
+    Args:
+        in_channels (int): Number of input channels (e.g., 3 for RGB images, 1 for grayscale).
+        input_size (int): Spatial dimensions of the input image (e.g., 32 for CIFAR-10, 28 for MNIST).
+
+    Returns:
+        tuple: A tuple containing the adversarial image (x_adv) and the applied perturbation (delta).
+    """
+
+    def __init__(
+        self, 
+        in_channels: int = 3, 
+        input_size: int = 32
+    ) -> None:
         super(AdvancedPerturbationGenerator, self).__init__()
 
         self.in_channels = in_channels
@@ -158,7 +166,7 @@ class AdvancedPerturbationGenerator(nn.Module):
             nn.Tanh()
         )
     
-    def forward(self, x, epsilon = 0.3):
+    def forward(self, x: torch.Tensor, epsilon: float = 0.3) -> tuple[torch.Tensor, torch.Tensor]:
         encoded = self.encoder(x)
         decoded = self.decoder(encoded)
 
@@ -171,5 +179,4 @@ class AdvancedPerturbationGenerator(nn.Module):
         x_adv = torch.clamp(x + delta, -1, 1)
 
         return x_adv, delta
-
-"""
+    

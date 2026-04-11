@@ -215,4 +215,3 @@ output/models/
 
 *.tar.gz
 *.pth
-*.npy

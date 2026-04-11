@@ -94,7 +94,7 @@ def train_1v1_one_epoch(
             outputs_adv = classifier(x_adv)
             
             loss_cnn = criterion(outputs_adv, labels)
-            loss_G = -loss_cnn # Maximitzar l'error
+            loss_G = -loss_cnn # Maximize the classifier's loss (minimize negative loss)
             
             loss_G.backward()
             optimizer_G.step()
@@ -151,8 +151,8 @@ def main() -> None:
     # DIRECTORY MANAGEMENT     
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     
-    matrices_dir = os.path.join(project_root, 'matrices')
-    models_dir = os.path.join(project_root, 'models')
+    matrices_dir = os.path.join(project_root, 'output/matrices')
+    models_dir = os.path.join(project_root, 'output/models')
     
     os.makedirs(matrices_dir, exist_ok=True)
     os.makedirs(models_dir, exist_ok=True)
@@ -173,9 +173,11 @@ def main() -> None:
     num_def = len(def_strategies)
     num_att = len(att_strategies)
     
-    # =================================================================
+
+
     # PHASE 1: PRE-TRAINING AND STORING BASE STATES
-    # =================================================================
+    
+
 
     print("\n🛡️ PHASE 1: Pre-training the 10 base Defenders...")
     pretrained_defender_states = []
@@ -197,9 +199,11 @@ def main() -> None:
         # Save the pre-trained model 
         torch.save(state_dict, os.path.join(models_dir, f"pretrained_{strat['name']}.pth"))
         
-    # =================================================================
+
+
     # PHASE 2: 100 INDIVIDUAL COMBATS WITH MATRICES PER EPOCH
-    # =================================================================
+
+
 
     print(f"\n⚔️ PHASE 2: Starting the {num_att}x{num_def} tournament ({epochs_combat} epochs per combat)...")
     
@@ -248,9 +252,12 @@ def main() -> None:
             del generator, classifier, opt_G, opt_C
             torch.cuda.empty_cache()
 
-    # =================================================================
+
+
     # RESULTS AND SAVING 3D MATRICES
-    # =================================================================
+
+
+
     print(f"\n🏁 Tournament finished in {time.time() - start_time:.2f} seconds.")
     
     # 1. Calculate the delta matrix (Clean - Adv) for each epoch
@@ -267,11 +274,6 @@ def main() -> None:
     np.save(os.path.join(matrices_dir, 'payoff_matrices_clean.npy'), matrices_clean)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_adv.npy'), matrices_adv)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_delta.npy'), matrices_delta)
-
-    # Last epoch as CSV for easier visualization in Excel/Sheets
-    np.savetxt(os.path.join(matrices_dir, 'final_clean.csv'), matrices_clean[-1], delimiter=';', fmt='%.2f')
-    np.savetxt(os.path.join(matrices_dir, 'final_adv.csv'), matrices_adv[-1], delimiter=';', fmt='%.2f')
-    np.savetxt(os.path.join(matrices_dir, 'final_delta.csv'), matrices_delta[-1], delimiter=';', fmt='%.2f')
     
     print(f"\n💾 Everything successfully saved in:\n - {matrices_dir}/\n - {models_dir}/")
 
