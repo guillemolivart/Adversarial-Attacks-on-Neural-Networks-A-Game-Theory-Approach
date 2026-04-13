@@ -164,7 +164,7 @@ def main() -> None:
     epsilon = 0.2
     lr = 0.001
     
-    trainloader, testloader = load_cifar10_data(batch_size=batch_size)
+    trainloader, testloader = load_cifar10_data(batch_size=batch_size, data_dir=os.path.join(project_root, 'data'))
     criterion = nn.CrossEntropyLoss()
     
     def_strategies = initialize_defenders()

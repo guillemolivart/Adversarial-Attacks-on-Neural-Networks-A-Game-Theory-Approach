@@ -60,14 +60,17 @@ def calculate_nash_equilibria(
 if __name__ == "__main__":
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
+    eps = [0.1, 0.2]
+    size = 10
+
     tasks = [
         {
-            "input": "output/matrices/matrices_10x10_eps_0.1/payoff_matrices_delta.npy",
-            "output": "output/nash_equilibria/nash_10x10_eps_0.1/nash_equilibria_results.csv"
+            "input": f"output/matrices/matrices_{size}x{size}_eps_{eps[0]}/payoff_matrices_delta.npy",
+            "output": f"output/nash_equilibria/nash_{size}x{size}_eps_{eps[0]}/nash_{size}x{size}_eps_{eps[0]}.csv"
         },
         {
-            "input": "output/matrices/matrices_10x10_eps_0.2/payoff_matrices_delta.npy",
-            "output": "output/nash_equilibria/nash_10x10_eps_0.2/nash_equilibria_results.csv"
+            "input": f"output/matrices/matrices_{size}x{size}_eps_{eps[1]}/payoff_matrices_delta.npy",
+            "output": f"output/nash_equilibria/nash_{size}x{size}_eps_{eps[1]}/nash_{size}x{size}_eps_{eps[1]}.csv"
         }
     ]
     

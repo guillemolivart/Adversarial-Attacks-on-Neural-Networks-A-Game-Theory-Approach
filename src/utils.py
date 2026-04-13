@@ -31,7 +31,8 @@ def set_seed(
 
 
 def load_cifar10_data(
-    batch_size=64
+    batch_size=64,
+    data_dir='./data'
 ) -> tuple:
     
     """
@@ -39,6 +40,7 @@ def load_cifar10_data(
     
     Args:
         batch_size (int): Number of samples per batch for training and testing. 
+        data_dir (str): Directory where the dataset will be stored or loaded from.
 
     Returns:
         A tuple containing the trainloader and testloader for CIFAR-10 dataset.
@@ -49,10 +51,11 @@ def load_cifar10_data(
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
     ])
     
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    # Utilitzem data_dir en lloc de './data'
+    trainset = torchvision.datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True)
     
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    testset = torchvision.datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False)
     
     return trainloader, testloader
