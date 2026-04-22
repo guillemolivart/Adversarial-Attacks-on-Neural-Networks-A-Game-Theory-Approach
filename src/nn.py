@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.ops import DropBlock2d
 
 
 class DynamicCNN(nn.Module):
     
     """
     A dynamically sized Convolutional Neural Network used as the Defender strategy.
-    The architecture scales automatically based on the provided depth and width.
+    The architecture scales automatically based on the provided depth and width, 
+    and supports ablation studies for regularization and normalization.
     
     Args:
         in_channels (int): Number of input channels (e.g., 3 for RGB images).
@@ -15,7 +17,9 @@ class DynamicCNN(nn.Module):
         output_channels (int): Number of target classes.
         num_blocks (int): Depth of the network (number of Conv2d + ReLU + MaxPool blocks).
         base_channels (int): Width of the network (channels in the first convolutional layer).
-        dropout_rate (float): Probability of an element to be zeroed in the fully connected layers.
+        reg_type (str): Type of regularization to apply ('none', 'dropout', or 'dropblock').
+        dropout_rate (float): Probability of an element to be zeroed. Set to 0.0 for no regularization.
+        norm_type (str): Type of normalization layer to use ('none', 'batch', or 'instance').
 
     Returns:
         The output logits for each class (before softmax).
@@ -28,7 +32,9 @@ class DynamicCNN(nn.Module):
         output_channels: int = 10, 
         num_blocks: int = 2, 
         base_channels: int = 32, 
-        dropout_rate: float = 0.5
+        reg_type: str = 'none',
+        dropout_rate: float = 0.0,
+        norm_type: str = 'none'
     ) -> None:       
         super(DynamicCNN, self).__init__()
         
@@ -41,9 +47,25 @@ class DynamicCNN(nn.Module):
         # Construct the convolutional blocks dynamically based on num_blocks and base_channels
         for i in range(num_blocks):
             self.features.add_module(f'conv_{i}', nn.Conv2d(current_channels, out_channels, kernel_size=3, padding=1))
+            
+            if norm_type == 'batch':
+                self.features.add_module(f'bn_{i}', nn.BatchNorm2d(out_channels))
+            elif norm_type == 'instance':
+                self.features.add_module(f'in_{i}', nn.InstanceNorm2d(out_channels))
+
             self.features.add_module(f'relu_{i}', nn.ReLU())
             self.features.add_module(f'pool_{i}', nn.MaxPool2d(kernel_size=2, stride=2))
             
+            if reg_type == 'dropout' and dropout_rate > 0:
+                # Dropout2d apaga feature maps sencers (molt millor per CNNs que el Dropout normal)
+                self.features.add_module(f'drop2d_{i}', nn.Dropout2d(p=dropout_rate))
+            elif reg_type == 'dropblock' and dropout_rate > 0:
+                # Si després del MaxPool la imatge serà més petita de 3x3, el DropBlock peta.
+                # Per evitar-ho, canviem la mida a 1 (que equival a un Dropout normal).
+                mida_matriu_actual = current_size // 2
+                b_size = 3 if mida_matriu_actual >= 3 else 1
+                self.features.add_module(f'dropblock_{i}', DropBlock2d(p=dropout_rate, block_size=b_size))
+
             current_channels = out_channels
             out_channels *= 2  # Double the channels at each block (e.g., 32 -> 64 -> 128)
             current_size //= 2 # The size is halved by MaxPool
@@ -53,10 +75,13 @@ class DynamicCNN(nn.Module):
         # Calculate the flattened size after the convolutional blocks to define the first fully connected layer
         flatten_size = current_channels * current_size * current_size
         
+        # Only apply dropout in the fully connected layers if reg_type is 'dropout' and dropout_rate > 0
+        clf_dropout = dropout_rate if reg_type == 'dropout' and dropout_rate > 0 else 0.0
+
         self.classifier = nn.Sequential(
             nn.Linear(flatten_size, 128),
             nn.ReLU(),
-            nn.Dropout(dropout_rate),
+            nn.Dropout(p = clf_dropout),
             nn.Linear(128, output_channels)
         )
 

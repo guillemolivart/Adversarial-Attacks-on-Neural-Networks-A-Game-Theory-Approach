@@ -162,3 +162,109 @@ def initialize_attackers() -> list:
     ]
         
     return attacker_strategies
+
+def get_defender_ablations(num_blocks: int) -> list:
+
+    """
+    Generates the ablation matrix (Norm, DropBlock, Both) for Defenders.
+
+    Args:
+        num_blocks (int): Number of convolutional blocks. Determines base channels.
+
+    Returns:
+        list: Dictionaries containing hyperparameters ('name', 'num_blocks', 
+              'base_channels', 'reg_type', 'dropout_rate', 'norm_type').
+    """
+
+    if num_blocks == 1:
+        channel_configs = [8, 16]
+    elif num_blocks == 2:
+        channel_configs = [16, 32]
+    elif num_blocks == 3:
+        channel_configs = [32, 64]
+    elif num_blocks >= 4:
+        # Mantenim el 128 per poder demostrar empíricament l'overfitting!
+        channel_configs = [32, 64, 128] 
+    else:
+        channel_configs = [32]
+
+    strategies = []
+    
+    for base_channels in channel_configs:
+        prefix = f"D_b{num_blocks}_c{base_channels}"
+        
+        strategies.extend([
+            # 1. Baseline (without normalization or regularization)
+            {'name': f'{prefix}_Vanilla', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'none', 'dropout_rate': 0.0, 'norm_type': 'none'},
+            
+            # 2. Only Normalization (BatchNorm i InstanceNorm)
+            {'name': f'{prefix}_BN', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'none', 'dropout_rate': 0.0, 'norm_type': 'batch'},
+            {'name': f'{prefix}_IN', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'none', 'dropout_rate': 0.0, 'norm_type': 'instance'},
+            
+            # 3. Only Regularization (DropBlock at 0.25 and 0.5)
+            {'name': f'{prefix}_DropBlock_025', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.25, 'norm_type': 'none'},
+            {'name': f'{prefix}_DropBlock_050', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.5, 'norm_type': 'none'},
+            
+            # 4. Both: Normalization + DropBlock at 0.25
+            {'name': f'{prefix}_BN+DropBlock_025', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.25, 'norm_type': 'batch'},
+            {'name': f'{prefix}_IN+DropBlock_025', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.25, 'norm_type': 'instance'},
+
+            # 5. Both: Normalization + DropBlock at 0.5
+            {'name': f'{prefix}_BN+DropBlock_050', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.5, 'norm_type': 'batch'},
+            {'name': f'{prefix}_IN+DropBlock_050', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.5, 'norm_type': 'instance'}
+        ])
+
+    return strategies
+
+
+def get_attacker_ablations(num_blocks: int) -> list:
+
+    """
+    Generates the ablation matrix (Norm, DropBlock, Both) for Attackers.
+
+    Args:
+        num_blocks (int): Number of convolutional blocks. Determines base channels.
+
+    Returns:
+        list: Dictionaries containing hyperparameters ('name', 'num_blocks', 
+              'base_channels', 'reg_type', 'dropout_rate', 'norm_type').
+    """
+
+    if num_blocks == 1:
+        channel_configs = [4, 8]
+    elif num_blocks == 2:
+        channel_configs = [8, 16]
+    elif num_blocks == 3:
+        channel_configs = [16, 32]
+    elif num_blocks >= 4:
+        channel_configs = [16, 32, 64] 
+    else:
+        channel_configs = [16]
+
+    strategies = []
+    
+    for base_channels in channel_configs:
+        prefix = f"A_b{num_blocks}_c{base_channels}"
+        
+        strategies.extend([
+            # 1. Baseline (without normalization or regularization)
+            {'name': f'{prefix}_Vanilla', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'none', 'dropout_rate': 0.0, 'norm_type': 'none'},
+            
+            # 2. Only Normalization (BatchNorm and InstanceNorm)
+            {'name': f'{prefix}_BN', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'none', 'dropout_rate': 0.0, 'norm_type': 'batch'},
+            {'name': f'{prefix}_IN', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'none', 'dropout_rate': 0.0, 'norm_type': 'instance'},
+            
+            # 3. Only Regularization (DropBlock at 0.25 and 0.5)
+            {'name': f'{prefix}_DropBlock_025', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.25, 'norm_type': 'none'},
+            {'name': f'{prefix}_DropBlock_050', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.5, 'norm_type': 'none'},
+            
+            # 4. Both: Normalization + DropBlock at 0.25
+            {'name': f'{prefix}_BN+DropBlock_025', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.25, 'norm_type': 'batch'},
+            {'name': f'{prefix}_IN+DropBlock_025', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.25, 'norm_type': 'instance'},
+
+            # 5. Both: Normalization + DropBlock at 0.5
+            {'name': f'{prefix}_BN+DropBlock_050', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.5, 'norm_type': 'batch'},
+            {'name': f'{prefix}_IN+DropBlock_050', 'num_blocks': num_blocks, 'base_channels': base_channels, 'reg_type': 'dropblock', 'dropout_rate': 0.5, 'norm_type': 'instance'}
+        ])
+
+    return strategies

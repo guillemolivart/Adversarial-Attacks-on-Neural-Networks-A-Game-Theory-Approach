@@ -10,7 +10,7 @@ import os
 
 from nn import DynamicCNN
 from generator import DynamicGenerator
-from utils import set_seed, load_cifar10_data, evaluate_accuracy, initialize_defenders, initialize_attackers
+from utils import set_seed, load_cifar10_data, evaluate_accuracy, get_defender_ablations, get_attacker_ablations
 
 
 def pretrain_classifier(
@@ -112,8 +112,8 @@ def train_1v1_one_epoch(
         outputs_clean = classifier(images)
         loss_C_clean = criterion(outputs_clean, labels)
 
-        x_adv, _ = generator(images, epsilon=epsilon) 
-        x_adv_final = x_adv.detach() 
+        with torch.no_grad():
+            x_adv_final, _ = generator(images, epsilon=epsilon)
         outputs_def = classifier(x_adv_final)
         loss_C_adv = criterion(outputs_def, labels)
         
@@ -167,11 +167,15 @@ def main() -> None:
     trainloader, testloader = load_cifar10_data(batch_size=batch_size, data_dir=os.path.join(project_root, 'data'))
     criterion = nn.CrossEntropyLoss()
     
-    def_strategies = initialize_defenders()
-    att_strategies = initialize_attackers()
+    def_strategies = get_defender_ablations(num_blocks=4)
+    att_strategies = get_attacker_ablations(num_blocks=4)
     
     num_def = len(def_strategies)
     num_att = len(att_strategies)
+
+    # Arrays to store training times
+    pretrain_times = np.zeros(num_def)
+    matrices_time = np.zeros((num_att, num_def))
     
 
 
@@ -179,19 +183,40 @@ def main() -> None:
     
 
 
-    print("\n🛡️ PHASE 1: Pre-training the 10 base Defenders...")
+    print(f"\n🛡️ PHASE 1: Pre-training the {num_def} base Defenders...")    
     pretrained_defender_states = []
     
     for i, strat in enumerate(def_strategies):
-        print(f"   Pre-training {strat['name']} ({i+1}/10)...")
 
-        # Classifier Model (Defender)
-        classifier = DynamicCNN(num_blocks=strat['num_blocks'], base_channels=strat['base_channels']).to(device)
+        model_filename = os.path.join(models_dir, f"pretrained_{strat['name']}.pth")
+        
+        # Comprovation: If the model already exists, we load it instead of re-training
+        if os.path.exists(model_filename):
+            print(f"   ⏭️ Pre-trained {strat['name']} ({i+1}/{num_def}) - Already exists! Loading the model...")
+            state_dict = torch.load(model_filename, map_location=device, weights_only=True)
+            pretrained_defender_states.append(state_dict)
+            pretrain_times[i] = 50.0 
+            continue
+
+        print(f"   Pre-training {strat['name']} ({i+1}/{num_def})...")
+
+        # Classifier Model (Defender) amb tots els paràmetres d'ablació
+        classifier = DynamicCNN(
+            num_blocks=strat['num_blocks'], 
+            base_channels=strat['base_channels'],
+            reg_type=strat['reg_type'],
+            dropout_rate=strat['dropout_rate'],
+            norm_type=strat['norm_type']
+        ).to(device)
 
         # Optimizer for the Classifier
         opt_C = optim.Adam(classifier.parameters(), lr=lr)
+
+        start_pt = time.time()
         
         pretrain_classifier(classifier, trainloader, criterion, opt_C, epochs_pretrain, device)
+
+        pretrain_times[i] = time.time() - start_pt
         
         state_dict = copy.deepcopy(classifier.state_dict())
         pretrained_defender_states.append(state_dict)
@@ -208,8 +233,20 @@ def main() -> None:
     print(f"\n⚔️ PHASE 2: Starting the {num_att}x{num_def} tournament ({epochs_combat} epochs per combat)...")
     
     # Create 3D Arrays: Dimensions -> (Epoch, Attacker, Defender)
-    matrices_clean = np.zeros((epochs_combat, num_att, num_def))
-    matrices_adv = np.zeros((epochs_combat, num_att, num_def))
+    clean_npy_path = os.path.join(matrices_dir, 'payoff_matrices_clean.npy')
+    adv_npy_path = os.path.join(matrices_dir, 'payoff_matrices_adv.npy')
+    time_npy_path = os.path.join(matrices_dir, 'time_total_matrix.npy')
+
+    # Comprovation: If the matrices already exist from a previous session, we load them!
+    if os.path.exists(clean_npy_path) and os.path.exists(adv_npy_path):
+        print("   🔄 Loading the saved matrices from a previous session...")
+        matrices_clean = np.load(clean_npy_path)
+        matrices_adv = np.load(adv_npy_path)
+        matrices_time = np.load(time_npy_path) if os.path.exists(time_npy_path) else np.zeros((num_att, num_def))
+    else:
+        # Create 3D Arrays if it's the first time
+        matrices_clean = np.zeros((epochs_combat, num_att, num_def))
+        matrices_adv = np.zeros((epochs_combat, num_att, num_def))
     
     total_games = num_att * num_def
     current_game = 1
@@ -217,21 +254,49 @@ def main() -> None:
     
     for r, att_strat in enumerate(att_strategies):
         for c, def_strat in enumerate(def_strategies):
+
+            gen_path = os.path.join(models_dir, f"generator_{att_strat['name']}_vs_{def_strat['name']}.pth")
+            class_path = os.path.join(models_dir, f"classifier_{def_strat['name']}_vs_{att_strat['name']}.pth")
             
+            # Comprovation: If the final models of this combat already exist, we skip the training and loading the results from the matrices
+            if os.path.exists(gen_path) and os.path.exists(class_path):
+                print(f"🔄 Game {current_game}/{total_games}: {att_strat['name']} vs {def_strat['name']}... ⏭️ Already exist! Loading the models...")
+                print(f"      👀 Acc Adversarial recuperated of first epoch matrix: {matrices_adv[0, r, c]:.4f}")
+                print(f"      👀 Acc Adversarial recuperated of last epoch matrix: {matrices_adv[-1, r, c]:.4f}")
+                current_game += 1
+                continue
+
             print(f"🔄 Game {current_game}/{total_games}: {att_strat['name']} vs {def_strat['name']}...")
             
             # 1. INITIALIZE MODELS FOR THIS COMBAT
 
             # Generator Model (Attacker)
-            generator = DynamicGenerator(num_blocks=att_strat['num_blocks'], base_channels=att_strat['base_channels']).to(device)
+            generator = DynamicGenerator(
+                num_blocks=att_strat['num_blocks'], 
+                base_channels=att_strat['base_channels'],
+                reg_type=att_strat['reg_type'],
+                dropout_rate=att_strat['dropout_rate'],
+                norm_type=att_strat['norm_type']
+            ).to(device)            
+            
             opt_G = optim.Adam(generator.parameters(), lr=lr)
             
             # Classifier Model (Defender) - Start from the pre-trained state
-            classifier = DynamicCNN(num_blocks=def_strat['num_blocks'], base_channels=def_strat['base_channels']).to(device)
+            classifier = DynamicCNN(
+                num_blocks=def_strat['num_blocks'], 
+                base_channels=def_strat['base_channels'],
+                reg_type=def_strat['reg_type'],
+                dropout_rate=def_strat['dropout_rate'],
+                norm_type=def_strat['norm_type']
+            ).to(device)
+
             classifier.load_state_dict(copy.deepcopy(pretrained_defender_states[c]))
+
             opt_C = optim.Adam(classifier.parameters(), lr=lr)
             
             # 2. EPOCH LOOP FOR THIS COMBAT
+
+            start_combat = time.time()
 
             for epoch in range(epochs_combat):
                 # Train only one epoch
@@ -243,10 +308,20 @@ def main() -> None:
                 matrices_clean[epoch, r, c] = acc_clean
                 matrices_adv[epoch, r, c] = acc_adv
             
+            combat_time = time.time() - start_combat
+            matrices_time[r, c] = pretrain_times[c] + combat_time
+
+            print(f"   ↳ ✅ Combat finished! Time: {combat_time:.2f}s (Total with pretrain: {matrices_time[r, c]:.2f}s)")
+            print(f"     📈 New Acc Adversarial saved in the matrix for epoch {epochs_combat}: {matrices_adv[-1, r, c]:.4f}")
+
             # 3. SAVE THE FINAL MODELS OF THIS COMBAT
-            torch.save(generator.state_dict(), os.path.join(models_dir, f"generator_{att_strat['name']}_vs_{def_strat['name']}.pth"))
-            torch.save(classifier.state_dict(), os.path.join(models_dir, f"classifier_{def_strat['name']}_vs_{att_strat['name']}.pth"))
-            
+            torch.save(generator.state_dict(), gen_path)
+            torch.save(classifier.state_dict(), class_path)
+
+            np.save(clean_npy_path, matrices_clean)
+            np.save(adv_npy_path, matrices_adv)
+            np.save(time_npy_path, matrices_time)
+
             current_game += 1
 
             del generator, classifier, opt_G, opt_C
@@ -269,11 +344,17 @@ def main() -> None:
 
     print(f"\n📉 FINAL DELTA MATRIX (Clean - Adv | Epoch {epochs_combat}):")
     print(np.round(matrices_delta[-1], 2))
+
+    print(f"\n⏱️ AVERAGE TOTAL TIME PER GAME: {np.mean(matrices_time):.2f} seconds.")
     
     # Save the 3D Arrays in the matrices folder
     np.save(os.path.join(matrices_dir, 'payoff_matrices_clean.npy'), matrices_clean)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_adv.npy'), matrices_adv)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_delta.npy'), matrices_delta)
+
+    # Save the training times
+    np.save(os.path.join(matrices_dir, 'time_pretrain_array.npy'), pretrain_times)
+    np.save(os.path.join(matrices_dir, 'time_total_matrix.npy'), matrices_time)
     
     print(f"\n💾 Everything successfully saved in:\n - {matrices_dir}/\n - {models_dir}/")
 

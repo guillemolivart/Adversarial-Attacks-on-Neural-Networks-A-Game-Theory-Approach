@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.ops import DropBlock2d
 
 
 class DynamicGenerator(nn.Module):
@@ -8,12 +9,16 @@ class DynamicGenerator(nn.Module):
     """
     An Autoencoder-based Adversarial Generator used as the Attacker strategy.
     It extracts features from an image and synthesizes targeted noise.
+    Supports dynamic structural scaling and ablation studies (regularization and normalization).
     
     Args:
         in_channels (int): Number of input channels (e.g., 3 for RGB images).
         input_size (int): Spatial dimensions of the input image.
         num_blocks (int): Depth of the encoder and decoder. Higher means larger receptive field.
         base_channels (int): Width of the network. Higher means more complex noise generation capacity.
+        reg_type (str): Type of spatial regularization to apply ('none', 'dropout', or 'dropblock').
+        dropout_rate (float): Probability of an element to be zeroed. Set to 0.0 for no regularization.
+        norm_type (str): Type of normalization layer to use ('none', 'batch', or 'instance').
 
     Returns:
         The adversarially perturbed image (x_adv) and the actual noise added (delta).
@@ -24,7 +29,10 @@ class DynamicGenerator(nn.Module):
         in_channels: int = 3, 
         input_size: int = 32, 
         num_blocks: int = 1, 
-        base_channels: int = 16
+        base_channels: int = 16,
+        reg_type: str = 'none',
+        dropout_rate: float = 0.0,
+        norm_type: str = 'none'
     ) -> None:
         super(DynamicGenerator, self).__init__()
         
@@ -36,14 +44,28 @@ class DynamicGenerator(nn.Module):
         
         # List to know how many channels each block will have (e.g., [16, 32, 64])
         enc_channels = [base_channels * (2**i) for i in range(num_blocks)]
+
+        current_size = input_size
         
         # Encoder construction (Downsampling)
         current_in = in_channels
         for i in range(num_blocks):
             current_out = enc_channels[i]
             self.encoder.add_module(f'enc_conv_{i}', nn.Conv2d(current_in, current_out, kernel_size=3, stride=2, padding=1))
-            self.encoder.add_module(f'enc_bn_{i}', nn.BatchNorm2d(current_out))
+            
+            current_size //= 2
+            if norm_type == 'batch':
+                self.encoder.add_module(f'enc_bn_{i}', nn.BatchNorm2d(current_out))
+            elif norm_type == 'instance':
+                self.encoder.add_module(f'enc_in_{i}', nn.InstanceNorm2d(current_out))
+            
             self.encoder.add_module(f'enc_relu_{i}', nn.ReLU())
+
+            if reg_type == 'dropout' and dropout_rate > 0:
+                self.encoder.add_module(f'enc_drop2d_{i}', nn.Dropout2d(p=dropout_rate))
+            elif reg_type == 'dropblock' and dropout_rate > 0:
+                b_size = 3 if current_size >= 3 else 1
+                self.encoder.add_module(f'enc_dropblock_{i}', DropBlock2d(p=dropout_rate, block_size=b_size))
             current_in = current_out
             
         # Decoder construction (Upsampling)
@@ -56,8 +78,21 @@ class DynamicGenerator(nn.Module):
             
             # output_padding=1 is key because the ConvTranspose2d doubles the size exactly
             self.decoder.add_module(f'dec_convT_{i}', nn.ConvTranspose2d(current_in, current_out, kernel_size=3, stride=2, padding=1, output_padding=1))
-            self.decoder.add_module(f'dec_bn_{i}', nn.BatchNorm2d(current_out))
+            
+            current_size *= 2
+
+            if norm_type == 'batch':
+                self.decoder.add_module(f'dec_bn_{i}', nn.BatchNorm2d(current_out))
+            elif norm_type == 'instance':
+                self.decoder.add_module(f'dec_in_{i}', nn.InstanceNorm2d(current_out))
+            
             self.decoder.add_module(f'dec_relu_{i}', nn.ReLU())
+
+            if reg_type == 'dropout' and dropout_rate > 0:
+                self.decoder.add_module(f'dec_drop2d_{i}', nn.Dropout2d(p=dropout_rate))
+            elif reg_type == 'dropblock' and dropout_rate > 0:
+                b_size = 3 if current_size >= 3 else 1
+                self.decoder.add_module(f'dec_dropblock_{i}', DropBlock2d(p=dropout_rate, block_size=b_size))
             
         # Final layer to generate noise, concatenating the original image with the decoder output
         self.final_layer = nn.Sequential(
