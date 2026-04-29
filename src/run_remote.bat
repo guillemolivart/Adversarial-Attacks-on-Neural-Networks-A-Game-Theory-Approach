@@ -1,10 +1,5 @@
 @echo off
-
 setlocal enabledelayedexpansion
-
-:: .env file should contain:
-:: PORT=YOUR_PORT_HERE
-:: HOST=root@LYOUR_IP_HERE
 
 if exist .env (
     for /f "tokens=*" %%i in (.env) do set %%i
@@ -14,17 +9,23 @@ if exist .env (
     exit /b
 )
 
-echo 1. Uploading your TFG code...
+echo 1. Uploading code AND existing matrices...
+:: Pugem el codi
 scp -P %PORT% -o ServerAliveInterval=60 *.py %HOST%:/workspace/
+:: IMPORTANT: Pugem les matrius que ja tens perquè el Python sàpiga on s'ha quedat
+if exist "..\matrices" scp -P %PORT% -o ServerAliveInterval=60 "..\matrices\*.npy" %HOST%:/output/matrices/
 
 echo 2. Setting up environment and executing training...
-ssh -p %PORT% -o ServerAliveInterval=60 %HOST% "mkdir -p /workspace/data /matrices /models && pip install torch torchvision numpy tqdm && [ -f /workspace/data/cifar-10-python.tar.gz ] || wget -O /workspace/data/cifar-10-python.tar.gz https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz && cd /workspace && python3 game.py"
+:: Hem corregit els mkdir perquè coincideixin amb el que vol el Python (/output/...)
+ssh -p %PORT% -o ServerAliveInterval=60 %HOST% "mkdir -p /workspace/data /output/matrices /output/models && pip install torch torchvision numpy tqdm && cd /workspace && python3 game.py"
 
 echo 3. Downloading results...
 if not exist "..\matrices" mkdir "..\matrices"
 if not exist "..\models" mkdir "..\models"
-scp -P %PORT% -o ServerAliveInterval=60 %HOST%:/matrices/*.npy "..\matrices"
-scp -P %PORT% -o ServerAliveInterval=60 %HOST%:/models/*.pth "..\models"
+
+:: ARA SI: Busquem a /output/matrices i /output/models
+scp -P %PORT% -o ServerAliveInterval=60 %HOST%:/output/matrices/*.npy "..\matrices"
+scp -P %PORT% -o ServerAliveInterval=60 %HOST%:/output/models/*.pth "..\models"
 
 echo ✅ Process completed!
 pause

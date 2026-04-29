@@ -259,10 +259,9 @@ def main() -> None:
             class_path = os.path.join(models_dir, f"classifier_{def_strat['name']}_vs_{att_strat['name']}.pth")
             
             # Comprovation: If the final models of this combat already exist, we skip the training and loading the results from the matrices
-            if os.path.exists(gen_path) and os.path.exists(class_path):
-                print(f"🔄 Game {current_game}/{total_games}: {att_strat['name']} vs {def_strat['name']}... ⏭️ Already exist! Loading the models...")
-                print(f"      👀 Acc Adversarial recuperated of first epoch matrix: {matrices_adv[0, r, c]:.4f}")
-                print(f"      👀 Acc Adversarial recuperated of last epoch matrix: {matrices_adv[-1, r, c]:.4f}")
+            # Comprovation: If the matrix already has data for this combat, we skip it
+            if matrices_adv[-1, r, c] != 0.0:
+                print(f"🔄 Game {current_game}/{total_games}: {att_strat['name']} vs {def_strat['name']}... ⏭️ Already done! Skipping...")
                 current_game += 1
                 continue
 
@@ -337,6 +336,8 @@ def main() -> None:
     
     # 1. Calculate the delta matrix (Clean - Adv) for each epoch
     matrices_delta = matrices_clean - matrices_adv
+    # 2. Calculate the relative loss (compact, similar style to delta)
+    matrices_relative_loss = (matrices_clean - matrices_adv) / (matrices_clean + 1e-8)
     
     # Print only the last epoch to the console as a summary
     print(f"\n📊 FINAL ADVERSARIAL ACCURACY MATRIX (Epoch {epochs_combat}):")
@@ -351,6 +352,7 @@ def main() -> None:
     np.save(os.path.join(matrices_dir, 'payoff_matrices_clean.npy'), matrices_clean)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_adv.npy'), matrices_adv)
     np.save(os.path.join(matrices_dir, 'payoff_matrices_delta.npy'), matrices_delta)
+    np.save(os.path.join(matrices_dir, 'payoff_matrices_relative_loss.npy'), matrices_relative_loss)
 
     # Save the training times
     np.save(os.path.join(matrices_dir, 'time_pretrain_array.npy'), pretrain_times)
